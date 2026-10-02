@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --background: #09090b;
+  --foreground: #fafafa;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+.react-flow__node { 
+  cursor: pointer; 
+}
+
+.react-flow__pane { 
+  cursor: default; 
+}
+
+.react-flow__edge-path { 
+  stroke: #6366f1; 
+  stroke-width: 2; 
+}
+
+.react-flow__edge.selected .react-flow__edge-path { 
+  stroke: #818cf8; 
+}
+
+.react-flow__handle { 
+  background: #6366f1; 
+  border: 2px solid #312e81; 
+  width: 10px; 
+  height: 10px; 
+}
