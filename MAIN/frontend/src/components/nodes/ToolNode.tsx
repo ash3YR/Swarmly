@@ -1,31 +1,81 @@
 /**
  * @file ToolNode.tsx
- * @description Custom ReactFlow node for Tools
+ * @description Custom ReactFlow node for Tool nodes.
+ *
+ * Design: same minimal left-border pattern as AgentNode, emerald accent.
  */
 import React from 'react';
 import { Handle, Position, NodeProps, type Node } from '@xyflow/react';
 import { Wrench } from 'lucide-react';
 import { NodeData } from '@/types/graph';
-import { cn } from '@/lib/utils';
+
+const ACCENT = '#3ecf8e';
+
+const TOOL_LABELS: Record<string, string> = {
+  tavily_search: 'Tavily Search',
+  wikipedia: 'Wikipedia',
+  calculator: 'Calculator',
+  python_repl: 'Python REPL',
+};
 
 export function ToolNode({ data, selected }: NodeProps<Node<NodeData>>) {
   return (
-    <div className={cn(
-      "min-w-[160px] rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 cursor-pointer",
-      selected && "ring-2 ring-emerald-500"
-    )}>
-      <Handle type="target" position={Position.Top} className="!bg-emerald-500 !border-emerald-900 !w-2.5 !h-2.5" />
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 text-emerald-400">
-          <Wrench size={16} />
-          <span className="text-xs font-semibold uppercase tracking-wider">Tool</span>
+    <div
+      style={{
+        minWidth: 150,
+        background: '#1e2622',
+        border: `1px solid ${selected ? ACCENT : '#2a332e'}`,
+        borderLeft: `3px solid ${ACCENT}`,
+        borderRadius: 9,
+        padding: '9px 13px 9px 11px',
+        cursor: 'pointer',
+        boxShadow: selected
+          ? `0 0 0 2px ${ACCENT}30, 0 4px 20px rgba(62,207,142,0.15)`
+          : '0 2px 12px rgba(0,0,0,0.4)',
+        transition: 'border-color 0.15s, box-shadow 0.15s',
+        position: 'relative',
+      }}
+    >
+      <Handle type="target" position={Position.Top} style={{ top: -5 }} />
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Wrench size={11} style={{ color: ACCENT, flexShrink: 0 }} />
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              color: ACCENT,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}
+          >
+            Tool
+          </span>
         </div>
-        <div className="text-sm font-medium text-white">{data.label}</div>
+
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#e4e4e7', lineHeight: 1.3 }}>
+          {data.label}
+        </div>
+
         {data.toolName && (
-          <div className="text-xs text-zinc-400 truncate max-w-[140px]">{data.toolName}</div>
+          <span
+            style={{
+              fontSize: 10,
+              color: '#71717a',
+              background: '#1a2e24',
+              border: '1px solid #2a3e30',
+              borderRadius: 4,
+              padding: '1px 5px',
+              alignSelf: 'flex-start',
+            }}
+          >
+            {TOOL_LABELS[data.toolName] ?? data.toolName}
+          </span>
         )}
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-emerald-500 !border-emerald-900 !w-2.5 !h-2.5" />
+
+      <Handle type="source" position={Position.Bottom} style={{ bottom: -5 }} />
     </div>
   );
 }

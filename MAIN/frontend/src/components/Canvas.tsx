@@ -1,7 +1,15 @@
 'use client';
 /**
  * @file Canvas.tsx
- * @description Main ReactFlow canvas for building agents
+ * @description Full-screen ReactFlow canvas.
+ *
+ * Layout: fills the entire viewport (position: fixed).
+ * All other UI (Toolbar, PropertiesPanel, CodeModal) float OVER this canvas.
+ * This is the Excalidraw pattern — canvas = background, UI = overlays.
+ *
+ * Drag-and-drop: node types are dragged from the Toolbar icons into the canvas.
+ * The `onDrop` handler reads the type from dataTransfer and places the node
+ * at the cursor's canvas position using `screenToFlowPosition`.
  */
 import React, { useCallback, useRef } from 'react';
 import {
@@ -20,67 +28,54 @@ import { ToolNode } from './nodes/ToolNode';
 import { RouterNode } from './nodes/RouterNode';
 import { NodeType, NodeData } from '@/types/graph';
 
+/* ── Node type registry ────────────────────────────────────────────────────── */
 const nodeTypes = {
   llm_agent: AgentNode,
   tool: ToolNode,
   router: RouterNode,
 };
 
+/* ── Default label map ─────────────────────────────────────────────────────── */
+const DEFAULT_LABEL: Record<NodeType, string> = {
+  llm_agent: 'LLM Agent',
+  tool: 'Tool',
+  router: 'Router',
+};
+
+/* ── Inner canvas (needs ReactFlow context) ────────────────────────────────── */
 function CanvasContent() {
-  const {
-    nodes,
-    edges,
-    onNodesChange,
-    onEdgesChange,
-    onConnect,
-    selectNode,
-    addNode,
-  } = useGraphStore();
-
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, selectNode, addNode } =
+    useGraphStore();
   const { screenToFlowPosition } = useReactFlow();
-  
-  // Track counts to generate default names
-  const counters = useRef({ llm_agent: 0, tool: 0, router: 0 });
 
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
+  // Per-type counters for default node labels
+  const counters = useRef<Record<NodeType, number>>({ llm_agent: 0, tool: 0, router: 0 });
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
   }, []);
 
   const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault();
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const type = e.dataTransfer.getData('application/reactflow-type') as NodeType;
+      if (!type || !(type in nodeTypes)) return;
 
-      const type = event.dataTransfer.getData('application/reactflow-type') as NodeType;
-      if (!type || !nodeTypes[type]) return;
+      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      counters.current[type] = (counters.current[type] ?? 0) + 1;
 
-      const position = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
-
-      counters.current[type] += 1;
-      const count = counters.current[type];
-      
-      const labelMap = {
-        llm_agent: 'LLM Agent',
-        tool: 'Tool',
-        router: 'Router'
-      };
-
-      const newNode = {
+      addNode({
         id: `${type}-${Date.now()}`,
         type,
         position,
-        data: { 
-          label: `${labelMap[type]} ${count}`,
+        data: {
+          label: `${DEFAULT_LABEL[type]} ${counters.current[type]}`,
           nodeType: type,
         } as NodeData,
-      };
-
-      addNode(newNode);
+      });
     },
-    [screenToFlowPosition, addNode]
+    [screenToFlowPosition, addNode],
   );
 
   return (
@@ -96,25 +91,42 @@ function CanvasContent() {
       onDrop={onDrop}
       nodeTypes={nodeTypes}
       fitView
+      fitViewOptions={{ padding: 0.3 }}
       snapToGrid
-      snapGrid={[16, 16]}
+      snapGrid={[8, 8]}
       deleteKeyCode={['Delete', 'Backspace']}
+      minZoom={0.2}
+      maxZoom={2.5}
+      style={{ background: 'var(--canvas-bg, #1a1a1a)' }}
     >
-      <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#3f3f46" />
-      <Controls className="!bg-zinc-900 !border-zinc-800 [&>button]:!border-zinc-800 [&>button]:!text-zinc-300 hover:[&>button]:!bg-zinc-800" />
-      <MiniMap 
-        className="!bg-zinc-900 !border-zinc-800" 
-        maskColor="rgba(0, 0, 0, 0.5)"
-        nodeColor="#52525b"
+      {/* Dot grid — subtle, like Excalidraw */}
+      <Background
+        variant={BackgroundVariant.Dots}
+        gap={24}
+        size={1}
+        color="#2e2e2e"
+      />
+      {/* Controls — positioned bottom-right via CSS */}
+      <Controls showInteractive={false} />
+      {/* MiniMap — bottom-right above controls */}
+      <MiniMap
+        nodeColor={(node) => {
+          const type = (node.data as NodeData).nodeType;
+          return type === 'llm_agent' ? '#7c6af7' : type === 'tool' ? '#3ecf8e' : '#f59e0b';
+        }}
+        maskColor="rgba(26,26,26,0.8)"
+        style={{ width: 120, height: 80 }}
       />
     </ReactFlow>
   );
 }
 
+/* ── Exported Canvas — wraps with ReactFlowProvider ────────────────────────── */
 export function Canvas() {
   return (
     <ReactFlowProvider>
-      <div className="w-full h-full">
+      {/* Full-screen: position fixed so Toolbar/PropertiesPanel float over it */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 0 }}>
         <CanvasContent />
       </div>
     </ReactFlowProvider>

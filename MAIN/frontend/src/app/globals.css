@@ -5,36 +5,182 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* ── Design tokens ─────────────────────────────────────────────────────────── */
 :root {
-  --background: #09090b;
-  --foreground: #fafafa;
+  --canvas-bg:     #1a1a1a;
+  --panel-bg:      #232329;
+  --panel-bg-alt:  #1e1e24;
+  --panel-hover:   #2a2a32;
+  --panel-active:  #303038;
+  --border:        #363636;
+  --border-subtle: #2c2c2c;
+  --text-primary:  #e4e4e7;
+  --text-muted:    #71717a;
+  --text-faint:    #52525b;
+  --accent:        #6965db;
+  --accent-hover:  #7c79e8;
+  --accent-glow:   rgba(105, 101, 219, 0.25);
+  /* Node type colors */
+  --llm-color:     #7c6af7;
+  --tool-color:    #3ecf8e;
+  --router-color:  #f59e0b;
 }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
+/* ── Base ───────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--canvas-bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.react-flow__node { 
-  cursor: pointer; 
+/* ── Scrollbars ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4a4a54; }
+
+/* ── Animation ──────────────────────────────────────────────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px) translateX(-50%); }
+  to   { opacity: 1; transform: translateY(0) translateX(-50%); }
 }
 
-.react-flow__pane { 
-  cursor: default; 
+.animate-spin-custom { animation: spin 1s linear infinite; }
+.panel-enter         { animation: fadeIn 0.15s ease forwards; }
+.toolbar-enter       { animation: slideDown 0.2s ease forwards; }
+
+/* ── ReactFlow: Canvas pane ─────────────────────────────────────────────────── */
+.react-flow__pane      { cursor: default; }
+.react-flow__node      { cursor: default; }
+.react-flow__renderer  { background: transparent; }
+.react-flow__attribution { display: none !important; }
+
+/* ── ReactFlow: Edges ───────────────────────────────────────────────────────── */
+.react-flow__edge-path {
+  stroke: #5b58c8;
+  stroke-width: 1.5;
+  transition: stroke 0.1s;
+}
+.react-flow__edge:hover .react-flow__edge-path { stroke: var(--accent); stroke-width: 2; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: var(--accent-hover); stroke-width: 2; }
+
+/* ── ReactFlow: Connection line (while dragging) ───────────────────────────── */
+.react-flow__connection-path {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 3;
+  opacity: 0.8;
 }
 
-.react-flow__edge-path { 
-  stroke: #6366f1; 
-  stroke-width: 2; 
+/* ── ReactFlow: Handles ─────────────────────────────────────────────────────── */
+.react-flow__handle {
+  background: var(--panel-bg) !important;
+  border: 1.5px solid #5b58c8 !important;
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease !important;
+  z-index: 10 !important;
+}
+.react-flow__handle:hover,
+.react-flow__handle.connecting {
+  transform: scale(1.6) !important;
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
 }
 
-.react-flow__edge.selected .react-flow__edge-path { 
-  stroke: #818cf8; 
+/* ── ReactFlow: Controls ────────────────────────────────────────────────────── */
+.react-flow__controls {
+  background: var(--panel-bg) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+  bottom: 56px !important;
+  right: 16px !important;
+  left: auto !important;
+}
+.react-flow__controls-button {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  color: var(--text-muted) !important;
+  width: 30px !important;
+  height: 30px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: background 0.1s, color 0.1s !important;
+}
+.react-flow__controls-button:last-child { border-bottom: none !important; }
+.react-flow__controls-button:hover {
+  background: var(--panel-hover) !important;
+  color: var(--text-primary) !important;
+}
+.react-flow__controls-button svg { fill: currentColor !important; max-width: 12px !important; max-height: 12px !important; }
+
+/* ── ReactFlow: MiniMap ─────────────────────────────────────────────────────── */
+.react-flow__minimap {
+  background: var(--panel-bg) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+  bottom: 16px !important;
+  right: 16px !important;
 }
 
-.react-flow__handle { 
-  background: #6366f1; 
-  border: 2px solid #312e81; 
-  width: 10px; 
-  height: 10px; 
+/* ── ReactFlow: Selection box ───────────────────────────────────────────────── */
+.react-flow__selection {
+  background: rgba(105, 101, 219, 0.07) !important;
+  border: 1px solid rgba(105, 101, 219, 0.5) !important;
+  border-radius: 4px !important;
+}
+
+/* ── Floating panel base ────────────────────────────────────────────────────── */
+.floating-panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4);
+}
+
+/* ── Form inputs ────────────────────────────────────────────────────────────── */
+.sf-input {
+  width: 100%;
+  background: var(--panel-bg-alt);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: inherit;
+}
+.sf-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+.sf-input::placeholder { color: var(--text-faint); }
+.sf-input option { background: #232329; }
+
+.sf-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
 }
