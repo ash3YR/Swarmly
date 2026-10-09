@@ -1,26 +1,46 @@
 'use client';
 /**
  * @file Toolbar.tsx
- * @description Excalidraw-style floating top-center toolbar.
- *
- * Design: a single floating pill anchored at the top-center of the viewport.
- * Contains the app logo, draggable node-type tools, and the Generate button.
- * No full-width header bar — canvas fills the entire screen.
- *
- * Node tools are draggable: grab them and drop onto the canvas.
+ * @description Floating top toolbar with click-to-add, workspace projects, manual save, templates, validation, and user menu.
  */
-import React, { useState } from 'react';
-import { Brain, Wrench, GitBranch, Code2, Loader2, ChevronDown } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Brain,
+  Wrench,
+  GitBranch,
+  Code2,
+  Loader2,
+  Plus,
+  LayoutTemplate,
+  Sliders,
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  Folder,
+  Save,
+  Check,
+} from 'lucide-react';
 import { useGraphStore } from '@/store/graphStore';
+import { useWorkspaceStore } from '@/store/workspaceStore';
 import { NodeType, GenerateRequest } from '@/types/graph';
-import { generateCode } from '@/lib/api';
+import { generateCode, ValidationError } from '@/lib/api';
+import { createDefaultNode } from '@/lib/nodeFactory';
+import { useReactFlow } from '@xyflow/react';
+import { toast } from '@/store/toastStore';
+import { UserMenu } from '@/components/UserMenu';
 
 /* ── Node tool definitions ─────────────────────────────────────────────────── */
-const NODE_TOOLS: { type: NodeType; icon: React.ElementType; label: string; color: string; description: string }[] = [
+const NODE_TOOLS: {
+  type: NodeType;
+  icon: React.ElementType;
+  label: string;
+  color: string;
+  description: string;
+}[] = [
   {
     type: 'llm_agent',
     icon: Brain,
-    label: 'LLM',
+    label: 'LLM Agent',
     color: '#7c6af7',
     description: 'Language model agent',
   },
@@ -40,7 +60,6 @@ const NODE_TOOLS: { type: NodeType; icon: React.ElementType; label: string; colo
   },
 ];
 
-/* ── Divider ───────────────────────────────────────────────────────────────── */
 function Divider() {
   return (
     <div
@@ -49,13 +68,12 @@ function Divider() {
         height: 20,
         background: 'var(--border)',
         flexShrink: 0,
-        margin: '0 2px',
+        margin: '0 4px',
       }}
     />
   );
 }
 
-/* ── Single draggable tool button ──────────────────────────────────────────── */
 function ToolButton({
   type,
   icon: Icon,
@@ -85,14 +103,12 @@ function ToolButton({
       onDragEnd={() => setDragging(false)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title={description}
+      title={`Drag to add ${description}`}
       style={{
         display: 'flex',
-        flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: 3,
-        padding: '5px 13px',
+        gap: 5,
+        padding: '5px 8px',
         borderRadius: 8,
         cursor: dragging ? 'grabbing' : 'grab',
         background: hovered ? 'var(--panel-hover)' : 'transparent',
@@ -102,14 +118,15 @@ function ToolButton({
         opacity: dragging ? 0.5 : 1,
       }}
     >
-      <Icon size={15} style={{ color, flexShrink: 0 }} />
+      <Icon size={13} style={{ color, flexShrink: 0 }} />
       <span
         style={{
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: 500,
           color: hovered ? 'var(--text-primary)' : 'var(--text-muted)',
-          letterSpacing: '0.02em',
+          letterSpacing: '0.01em',
           transition: 'color 0.12s',
+          whiteSpace: 'nowrap',
         }}
       >
         {label}
@@ -118,17 +135,76 @@ function ToolButton({
   );
 }
 
-/* ── Main Toolbar ───────────────────────────────────────────────────────────── */
 export function Toolbar() {
-  const { nodes, edges, agentName, isGenerating, setIsGenerating, setGeneratedCode, setIsCodeModalOpen } =
-    useGraphStore();
+  const {
+    nodes,
+    edges,
+    agentName,
+    isGenerating,
+    setIsGenerating,
+    setGeneratedCode,
+    setIsCodeModalOpen,
+    isInspectorOpen,
+    setIsInspectorOpen,
+    setIsTemplateModalOpen,
+    validationErrors,
+    isValidating,
+    addNode,
+    selectNode,
+  } = useGraphStore();
 
+  const {
+    activeProject,
+    activeWorkflow,
+    setIsWorkspaceModalOpen,
+    manualSaveWorkflow,
+    isSaving,
+    saveStatus,
+  } = useWorkspaceStore();
+
+  const { screenToFlowPosition } = useReactFlow();
+
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [genHovered, setGenHovered] = useState(false);
+  const addMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close Add Menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node as unknown as globalThis.Node)) {
+        setAddMenuOpen(false);
+      }
+    };
+    if (addMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [addMenuOpen]);
+
+  const handleQuickAdd = (type: NodeType) => {
+    setAddMenuOpen(false);
+
+    const offset = (nodes.length % 5) * 35;
+    const pos = typeof window !== 'undefined'
+      ? screenToFlowPosition({
+          x: window.innerWidth / 2 - 100 + offset,
+          y: window.innerHeight / 2 - 80 + offset,
+        })
+      : { x: 300 + offset, y: 250 + offset };
+
+    const newNode = createDefaultNode(type, pos);
+    addNode(newNode);
+    toast.info(`Added ${newNode.data.label}`, 'Configuring node in inspector.');
+  };
+
+  const errorCount = validationErrors.filter((e) => e.severity === 'error').length;
+  const warningCount = validationErrors.filter((e) => e.severity === 'warning').length;
   const canGenerate = nodes.length > 0 && !isGenerating;
 
   const handleGenerate = async () => {
     if (!canGenerate) return;
     setIsGenerating(true);
+
     try {
       const request: GenerateRequest = {
         agent_name: agentName || 'MyAgent',
@@ -154,11 +230,31 @@ export function Toolbar() {
           label: e.label as string | undefined,
         })),
       };
+
       const res = await generateCode(request);
       setGeneratedCode(res.code);
       setIsCodeModalOpen(true);
-    } catch {
-      alert('Failed to generate code. Is the backend running on port 8000?');
+      toast.success('Python code generated', `Compiled ${res.node_count} nodes into runnable LangGraph Python.`);
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        const errorList = err.errors
+          .filter((e) => e.severity === 'error')
+          .map((e) => `• ${e.message}`)
+          .join('\n');
+
+        toast.error('Workflow validation failed', errorList);
+
+        setIsInspectorOpen(true);
+        const firstErrorNode = err.errors.find((e) => e.node_id);
+        if (firstErrorNode?.node_id) {
+          selectNode(firstErrorNode.node_id);
+        }
+      } else {
+        toast.error(
+          'Generation failed',
+          'Could not contact compilation service. Ensure FastAPI backend is running on port 8000.'
+        );
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -175,13 +271,15 @@ export function Toolbar() {
         zIndex: 100,
         display: 'flex',
         alignItems: 'center',
-        height: 46,
-        padding: '0 6px',
+        height: 48,
+        padding: '0 8px',
         background: 'var(--panel-bg)',
         border: '1px solid var(--border)',
-        borderRadius: 12,
-        boxShadow: '0 4px 24px rgba(0,0,0,0.65), 0 1px 4px rgba(0,0,0,0.4)',
-        gap: 0,
+        borderRadius: 14,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.65), 0 2px 8px rgba(0,0,0,0.4)',
+        gap: 2,
+        maxWidth: 'calc(100vw - 360px)',
+        overflowX: 'auto',
       }}
     >
       {/* ── Logo ─────────────────────────────────────────────────────────── */}
@@ -189,8 +287,8 @@ export function Toolbar() {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          padding: '0 10px 0 6px',
+          gap: 7,
+          padding: '0 6px 0 4px',
         }}
       >
         <div
@@ -206,12 +304,12 @@ export function Toolbar() {
             boxShadow: '0 2px 8px rgba(105,101,219,0.4)',
           }}
         >
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>S</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>S</span>
         </div>
         <span
           style={{
             fontSize: 13,
-            fontWeight: 600,
+            fontWeight: 700,
             color: 'var(--text-primary)',
             letterSpacing: '-0.3px',
             whiteSpace: 'nowrap',
@@ -223,7 +321,210 @@ export function Toolbar() {
 
       <Divider />
 
-      {/* ── Node tools ───────────────────────────────────────────────────── */}
+      {/* ── Workspace & Projects Button ────────────────────────────────────── */}
+      <button
+        onClick={() => setIsWorkspaceModalOpen(true)}
+        title="Open workspace projects and workflows"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '5px 9px',
+          borderRadius: 8,
+          background: 'transparent',
+          border: 'none',
+          color: activeProject ? '#e4e4e7' : 'var(--text-muted)',
+          fontSize: 11.5,
+          fontWeight: 500,
+          cursor: 'pointer',
+          transition: 'background 0.12s, color 0.12s',
+          fontFamily: 'inherit',
+          maxWidth: 160,
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--panel-hover)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+        }}
+      >
+        <Folder size={13} className={activeProject ? 'text-[#8b88f8]' : 'text-zinc-400'} />
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {activeProject
+            ? `${activeProject.name}${activeWorkflow ? ` / ${activeWorkflow.name}` : ''}`
+            : 'Workspace'}
+        </span>
+        <ChevronDown size={11} className="text-zinc-400 shrink-0" />
+      </button>
+
+      {/* ── Manual Save Button ────────────────────────────────────────────── */}
+      <button
+        onClick={() => manualSaveWorkflow()}
+        disabled={isSaving}
+        title="Manually save current workflow to Supabase database"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          padding: '5px 9px',
+          borderRadius: 7,
+          background: saveStatus === 'saved' ? 'rgba(62, 207, 142, 0.12)' : 'transparent',
+          border: `1px solid ${saveStatus === 'saved' ? 'rgba(62, 207, 142, 0.3)' : 'transparent'}`,
+          color: saveStatus === 'saved' ? '#3ecf8e' : 'var(--text-muted)',
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: isSaving ? 'not-allowed' : 'pointer',
+          transition: 'all 0.15s ease',
+          fontFamily: 'inherit',
+        }}
+        onMouseEnter={(e) => {
+          if (saveStatus !== 'saved') {
+            e.currentTarget.style.background = 'var(--panel-hover)';
+            e.currentTarget.style.color = 'var(--text-primary)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (saveStatus !== 'saved') {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = 'var(--text-muted)';
+          }
+        }}
+      >
+        {isSaving ? (
+          <Loader2 size={12} className="animate-spin text-zinc-400" />
+        ) : saveStatus === 'saved' ? (
+          <Check size={12} className="text-emerald-400" />
+        ) : (
+          <Save size={12} />
+        )}
+        <span>{isSaving ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : 'Save'}</span>
+      </button>
+
+      <Divider />
+
+      {/* ── + Add Node Dropdown ────────────────────────────────────────────── */}
+      <div ref={addMenuRef} style={{ position: 'relative' }}>
+        <button
+          onClick={() => setAddMenuOpen(!addMenuOpen)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '5px 9px',
+            borderRadius: 8,
+            background: addMenuOpen ? 'var(--panel-hover)' : 'transparent',
+            border: 'none',
+            color: '#c4b5fd',
+            fontSize: 11.5,
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'background 0.12s',
+            fontFamily: 'inherit',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--panel-hover)')}
+          onMouseLeave={(e) => {
+            if (!addMenuOpen) e.currentTarget.style.background = 'transparent';
+          }}
+        >
+          <Plus size={13} className="text-[#8b88f8]" />
+          <span>Add Node</span>
+          <ChevronDown size={11} className="text-zinc-400" />
+        </button>
+
+        {addMenuOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 'calc(100% + 8px)',
+              left: 0,
+              width: 170,
+              background: '#202028',
+              border: '1px solid #363644',
+              borderRadius: 10,
+              boxShadow: '0 12px 36px rgba(0,0,0,0.7), 0 2px 8px rgba(0,0,0,0.5)',
+              padding: 4,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+              zIndex: 110,
+            }}
+          >
+            <button
+              onClick={() => handleQuickAdd('llm_agent')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '7px 10px',
+                borderRadius: 6,
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-primary)',
+                fontSize: 12,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#2c2c38')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <Brain size={14} className="text-[#7c6af7]" />
+              <span>LLM Agent</span>
+            </button>
+
+            <button
+              onClick={() => handleQuickAdd('tool')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '7px 10px',
+                borderRadius: 6,
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-primary)',
+                fontSize: 12,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#2c2c38')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <Wrench size={14} className="text-[#3ecf8e]" />
+              <span>Tool</span>
+            </button>
+
+            <button
+              onClick={() => handleQuickAdd('router')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '7px 10px',
+                borderRadius: 6,
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-primary)',
+                fontSize: 12,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#2c2c38')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <GitBranch size={14} className="text-[#f59e0b]" />
+              <span>Router</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Draggable tool shortcuts ───────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center' }}>
         {NODE_TOOLS.map((tool) => (
           <ToolButton key={tool.type} {...tool} />
@@ -232,27 +533,130 @@ export function Toolbar() {
 
       <Divider />
 
-      {/* ── Agent name (compact inline input) ───────────────────────────── */}
-      <input
-        type="text"
-        value={agentName}
-        onChange={(e) => useGraphStore.setState({ agentName: e.target.value })}
-        placeholder="Agent name"
-        spellCheck={false}
+      {/* ── Templates button ──────────────────────────────────────────────── */}
+      <button
+        onClick={() => setIsTemplateModalOpen(true)}
+        title="Choose a starter workflow template"
         style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          padding: '5px 8px',
+          borderRadius: 8,
           background: 'transparent',
           border: 'none',
-          outline: 'none',
-          fontSize: 12,
+          color: 'var(--text-muted)',
+          fontSize: 11,
           fontWeight: 500,
-          color: 'var(--text-primary)',
-          width: 120,
-          padding: '0 10px',
-          caretColor: 'var(--accent)',
+          cursor: 'pointer',
+          transition: 'background 0.12s, color 0.12s',
           fontFamily: 'inherit',
         }}
-        onFocus={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-      />
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--panel-hover)';
+          e.currentTarget.style.color = 'var(--text-primary)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = 'var(--text-muted)';
+        }}
+      >
+        <LayoutTemplate size={13} className="text-amber-400" />
+        <span>Templates</span>
+      </button>
+
+      <Divider />
+
+      {/* ── Validation Status Pill ────────────────────────────────────────── */}
+      <button
+        onClick={() => setIsInspectorOpen(true)}
+        title={
+          errorCount > 0
+            ? `${errorCount} validation errors. Click to open Inspector.`
+            : warningCount > 0
+            ? `${warningCount} warnings. Click to open Inspector.`
+            : 'Workflow topology is valid.'
+        }
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          padding: '4px 7px',
+          borderRadius: 7,
+          background:
+            errorCount > 0
+              ? 'rgba(239, 68, 68, 0.15)'
+              : warningCount > 0
+              ? 'rgba(245, 158, 11, 0.15)'
+              : 'rgba(62, 207, 142, 0.12)',
+          border: `1px solid ${
+            errorCount > 0
+              ? 'rgba(239, 68, 68, 0.35)'
+              : warningCount > 0
+              ? 'rgba(245, 158, 11, 0.35)'
+              : 'rgba(62, 207, 142, 0.25)'
+          }`,
+          color:
+            errorCount > 0
+              ? '#fca5a5'
+              : warningCount > 0
+              ? '#fde68a'
+              : '#86efac',
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: 'pointer',
+          transition: 'all 0.12s',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {isValidating ? (
+          <Loader2 size={11} className="animate-spin text-zinc-400" />
+        ) : errorCount > 0 ? (
+          <AlertCircle size={11} className="text-red-400" />
+        ) : warningCount > 0 ? (
+          <AlertCircle size={11} className="text-amber-400" />
+        ) : (
+          <CheckCircle2 size={11} className="text-emerald-400" />
+        )}
+        <span>
+          {isValidating
+            ? 'Validating…'
+            : errorCount > 0
+            ? `${errorCount} error${errorCount > 1 ? 's' : ''}`
+            : warningCount > 0
+            ? `${warningCount} warn`
+            : nodes.length === 0
+            ? 'Ready'
+            : 'Valid'}
+        </span>
+      </button>
+
+      {/* ── Toggle Inspector button ───────────────────────────────────────── */}
+      <button
+        onClick={() => setIsInspectorOpen(!isInspectorOpen)}
+        title={isInspectorOpen ? 'Hide Inspector' : 'Show Inspector'}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 28,
+          height: 28,
+          borderRadius: 7,
+          background: isInspectorOpen ? 'var(--panel-active)' : 'transparent',
+          border: 'none',
+          color: isInspectorOpen ? 'var(--text-primary)' : 'var(--text-muted)',
+          cursor: 'pointer',
+          transition: 'background 0.12s, color 0.12s',
+        }}
+        onMouseEnter={(e) => {
+          if (!isInspectorOpen) e.currentTarget.style.background = 'var(--panel-hover)';
+        }}
+        onMouseLeave={(e) => {
+          if (!isInspectorOpen) e.currentTarget.style.background = 'transparent';
+        }}
+      >
+        <Sliders size={13} />
+      </button>
 
       <Divider />
 
@@ -265,9 +669,8 @@ export function Toolbar() {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 6,
-          padding: '6px 14px',
-          margin: '0 4px 0 2px',
+          gap: 5,
+          padding: '5px 12px',
           background: canGenerate
             ? genHovered
               ? 'var(--accent-hover)'
@@ -276,7 +679,7 @@ export function Toolbar() {
           border: 'none',
           borderRadius: 8,
           color: canGenerate ? '#fff' : 'var(--text-faint)',
-          fontSize: 12,
+          fontSize: 11.5,
           fontWeight: 600,
           cursor: canGenerate ? 'pointer' : 'not-allowed',
           transition: 'background 0.15s ease, color 0.15s ease',
@@ -287,12 +690,17 @@ export function Toolbar() {
         }}
       >
         {isGenerating ? (
-          <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+          <Loader2 size={12} className="animate-spin" />
         ) : (
-          <Code2 size={13} />
+          <Code2 size={12} />
         )}
         {isGenerating ? 'Generating…' : 'Generate'}
       </button>
+
+      <Divider />
+
+      {/* ── Google Auth / User Menu ───────────────────────────────────────── */}
+      <UserMenu />
     </div>
   );
 }

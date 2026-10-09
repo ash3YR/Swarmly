@@ -11,6 +11,7 @@ export interface NodeData extends Record<string, unknown> {
   apiKey?: string;
   systemPrompt?: string;
   temperature?: number;
+  tools?: ToolName[];
   // Tool fields
   toolName?: ToolName;
   toolApiKey?: string;
@@ -29,9 +30,28 @@ export interface GenerateRequest {
   edges: Array<{source: string; target: string; label?: string}>;
 }
 
+export interface ValidationErrorItem {
+  severity: 'error' | 'warning';
+  message: string;
+  node_id?: string;
+  edge_source?: string;
+  edge_target?: string;
+}
+
 export interface GenerateResponse {
   code: string;
   agent_name: string;
   node_count: number;
   edge_count: number;
+  validation_warnings?: ValidationErrorItem[];
+}
+
+export interface ValidationResponse {
+  valid: boolean;
+  errors: ValidationErrorItem[];
+}
+
+export interface ValidationErrorResponse {
+  valid: false;
+  errors: ValidationErrorItem[];
 }

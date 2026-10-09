@@ -1,441 +1,512 @@
 'use client';
 /**
  * @file PropertiesPanel.tsx
- * @description Floating properties panel — Excalidraw-style.
- *
- * Design decisions:
- * - Floats over the canvas on the left side (position: fixed), vertically centered.
- * - Appears with a fade+slide animation when a node is selected.
- * - Compact width (268px) — enough for form fields, not so wide it feels like a sidebar.
- * - Grouped fields with section labels, not a wall of inputs.
- * - All input styling comes from the .sf-input / .sf-label CSS classes in globals.css.
+ * @description Docked right-side IDE inspector for configuring selected nodes in Navy / Slate aesthetic.
  */
 import React from 'react';
-import { X, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
+import {
+  X,
+  Plus,
+  Trash2,
+  Brain,
+  Wrench,
+  GitBranch,
+  AlertCircle,
+  Sliders,
+  Check,
+} from 'lucide-react';
 import { useGraphStore } from '@/store/graphStore';
 import { LLMProvider, ToolName, RouterCondition } from '@/types/graph';
 
-/* ── Field components ───────────────────────────────────────────────────────── */
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  error,
+  children,
+}: {
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <label className="sf-label">{label}</label>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <label className="sf-label" style={{ margin: 0 }}>{label}</label>
+        {error && (
+          <span style={{ fontSize: 10, color: '#C97878', fontWeight: 500 }}>
+            {error}
+          </span>
+        )}
+      </div>
       {children}
     </div>
   );
 }
 
-function SecretInput({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  const [visible, setVisible] = React.useState(false);
-  return (
-    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-      <input
-        type={visible ? 'text' : 'password'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="sf-input"
-        style={{ paddingRight: 30 }}
-        spellCheck={false}
-        autoComplete="off"
-      />
-      <button
-        onClick={() => setVisible((v) => !v)}
-        style={{
-          position: 'absolute',
-          right: 8,
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          color: 'var(--text-faint)',
-          padding: 0,
-          display: 'flex',
-        }}
-      >
-        {visible ? <EyeOff size={12} /> : <Eye size={12} />}
-      </button>
-    </div>
-  );
-}
-
-/* ── Section divider inside panel ───────────────────────────────────────────── */
-function PanelDivider({ label }: { label: string }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        margin: '4px 0',
-      }}
-    >
-      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-        {label}
-      </span>
-      <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
-    </div>
-  );
-}
-
-/* ── Model placeholder map ───────────────────────────────────────────────────── */
-const MODEL_PLACEHOLDER: Record<string, string> = {
-  openai: 'gpt-4o',
-  anthropic: 'claude-3-5-sonnet-20241022',
-  google: 'gemini-1.5-pro',
-  ollama: 'llama3.2',
+const PROVIDER_MODELS: Record<LLMProvider, string[]> = {
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+  anthropic: [
+    'claude-3-5-sonnet-20241022',
+    'claude-3-5-haiku-20241022',
+    'claude-3-opus-20240229',
+  ],
+  google: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash'],
+  ollama: ['llama3.2', 'llama3.1', 'mistral', 'qwen2.5', 'deepseek-r1'],
 };
 
-/* ── Node type accent colors ────────────────────────────────────────────────── */
-const NODE_ACCENT: Record<string, string> = {
-  llm_agent: '#7c6af7',
-  tool: '#3ecf8e',
-  router: '#f59e0b',
-};
-
-const NODE_LABEL: Record<string, string> = {
-  llm_agent: 'LLM Agent',
-  tool: 'Tool',
-  router: 'Router',
-};
-
-/* ── Main PropertiesPanel ───────────────────────────────────────────────────── */
 export function PropertiesPanel() {
-  const { nodes, selectedNodeId, selectNode, updateNodeData } = useGraphStore();
+  const {
+    nodes,
+    edges,
+    selectedNodeId,
+    selectNode,
+    updateNodeData,
+    deleteNode,
+    isInspectorOpen,
+    setIsInspectorOpen,
+    validationErrors,
+  } = useGraphStore();
+
+  if (!isInspectorOpen) return null;
+
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+  const nodeErrors = selectedNodeId
+    ? validationErrors.filter((e) => e.node_id === selectedNodeId)
+    : [];
 
-  if (!selectedNode) return null;
-
-  const { data } = selectedNode;
-  const accent = NODE_ACCENT[data.nodeType] ?? 'var(--accent)';
-  const updateData = (updates: Record<string, unknown>) => updateNodeData(selectedNode.id, updates);
+  const handleUpdate = (patch: Record<string, any>) => {
+    if (!selectedNodeId) return;
+    updateNodeData(selectedNodeId, patch);
+  };
 
   return (
-    <div
-      className="panel-enter"
+    <aside
       style={{
-        position: 'fixed',
-        left: 14,
-        top: '50%',
-        transform: 'translateY(-50%)',
-        zIndex: 90,
-        width: 268,
-        maxHeight: 'calc(100vh - 100px)',
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        background: 'var(--panel-bg)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        boxShadow: '0 8px 40px rgba(0,0,0,0.65), 0 2px 8px rgba(0,0,0,0.4)',
+        width: 320,
+        height: '100%',
+        background: '#111A24',
+        borderLeft: '1px solid #2A3947',
+        display: 'flex',
+        flexDirection: 'column',
+        userSelect: 'none',
+        flexShrink: 0,
+        zIndex: 40,
       }}
     >
-      {/* ── Panel header ─────────────────────────────────────────────────── */}
+      {/* ── Inspector Header ─────────────────────────────────────────────────── */}
       <div
         style={{
+          padding: '10px 14px',
+          borderBottom: '1px solid #1E2A36',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '10px 12px 8px',
-          borderBottom: '1px solid var(--border-subtle)',
-          position: 'sticky',
-          top: 0,
-          background: 'var(--panel-bg)',
-          zIndex: 1,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: accent,
-              boxShadow: `0 0 6px ${accent}`,
-              flexShrink: 0,
-            }}
-          />
-          <input
-            type="text"
-            value={data.label}
-            onChange={(e) => updateData({ label: e.target.value })}
-            spellCheck={false}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              fontSize: 13,
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              width: 160,
-              fontFamily: 'inherit',
-              caretColor: accent,
-            }}
-          />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Sliders size={13} style={{ color: '#8FA8BB' }} />
           <span
             style={{
-              fontSize: 9,
-              fontWeight: 600,
-              color: accent,
-              background: `${accent}18`,
-              border: `1px solid ${accent}30`,
-              padding: '2px 6px',
-              borderRadius: 4,
-              letterSpacing: '0.05em',
+              fontSize: 10,
+              fontWeight: 700,
+              color: '#8B98A5',
+              letterSpacing: '0.08em',
               textTransform: 'uppercase',
+              fontFamily: 'var(--font-mono), monospace',
             }}
           >
-            {NODE_LABEL[data.nodeType] ?? data.nodeType}
+            INSPECTOR
           </span>
-          <button
-            onClick={() => selectNode(null)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--text-faint)',
-              padding: 4,
-              borderRadius: 6,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'color 0.1s, background 0.1s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'var(--text-primary)';
-              e.currentTarget.style.background = 'var(--panel-hover)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'var(--text-faint)';
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
-            <X size={14} />
-          </button>
         </div>
+
+        <button
+          onClick={() => setIsInspectorOpen(false)}
+          title="Close Inspector"
+          style={{ background: 'none', border: 'none', color: '#8B98A5', cursor: 'pointer', padding: 2 }}
+        >
+          <X size={14} />
+        </button>
       </div>
 
-      {/* ── Panel body ───────────────────────────────────────────────────── */}
-      <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* ── Content ─────────────────────────────────────────────────────────── */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+        }}
+      >
+        {!selectedNode ? (
+          /* Workflow Overview when no node selected */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#E7EBEF', marginBottom: 4 }}>
+                Workflow Topology
+              </div>
+              <p style={{ fontSize: 11.5, color: '#8B98A5', margin: 0, lineHeight: 1.5 }}>
+                Select any node on the canvas to configure its models, prompts, tools, or routing conditions.
+              </p>
+            </div>
 
-        {/* ── LLM Agent fields ─────────────────────────────────────────── */}
-        {data.nodeType === 'llm_agent' && (
-          <>
-            <PanelDivider label="Model" />
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 8,
+                padding: '10px 12px',
+                background: '#182330',
+                border: '1px solid #2A3947',
+                borderRadius: 6,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 10, color: '#5B6A78', textTransform: 'uppercase' }}>Nodes</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#DDD7CC' }}>{nodes.length}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: '#5B6A78', textTransform: 'uppercase' }}>Edges</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#DDD7CC' }}>{edges.length}</div>
+              </div>
+            </div>
 
-            <Field label="Provider">
-              <select
-                value={data.provider ?? ''}
-                onChange={(e) => updateData({ provider: e.target.value as LLMProvider })}
-                className="sf-input"
-              >
-                <option value="" disabled>Select provider</option>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="google">Google</option>
-                <option value="ollama">Ollama (local)</option>
-              </select>
-            </Field>
-
-            <Field label="Model">
-              <input
-                type="text"
-                value={data.model ?? ''}
-                onChange={(e) => updateData({ model: e.target.value })}
-                placeholder={MODEL_PLACEHOLDER[data.provider ?? ''] ?? 'e.g. gpt-4o'}
-                className="sf-input"
-                spellCheck={false}
-              />
-            </Field>
-
-            {data.provider !== 'ollama' && (
-              <Field label="API Key">
-                <SecretInput
-                  value={data.apiKey ?? ''}
-                  onChange={(v) => updateData({ apiKey: v })}
-                  placeholder="sk-..."
-                />
-              </Field>
+            {/* Validation List */}
+            {validationErrors.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                <div style={{ fontSize: 10.5, fontWeight: 600, color: '#8B98A5', textTransform: 'uppercase' }}>
+                  Diagnostics ({validationErrors.length})
+                </div>
+                {validationErrors.map((err, i) => (
+                  <div
+                    key={i}
+                    onClick={() => err.node_id && selectNode(err.node_id)}
+                    style={{
+                      padding: '8px 10px',
+                      background: '#182330',
+                      borderLeft: `2px solid ${err.severity === 'error' ? '#C97878' : '#D4A373'}`,
+                      borderRadius: 4,
+                      fontSize: 11,
+                      color: err.severity === 'error' ? '#E7A1A1' : '#E6C59E',
+                      cursor: err.node_id ? 'pointer' : 'default',
+                    }}
+                  >
+                    {err.message}
+                  </div>
+                ))}
+              </div>
             )}
-
-            <PanelDivider label="Prompt" />
-
-            <Field label="System Prompt">
-              <textarea
-                value={data.systemPrompt ?? ''}
-                onChange={(e) => updateData({ systemPrompt: e.target.value })}
-                placeholder="You are a helpful assistant..."
-                rows={4}
-                className="sf-input"
-                style={{ resize: 'vertical', minHeight: 72, lineHeight: 1.5 }}
-                spellCheck={false}
-              />
-            </Field>
-
-            <Field label="Temperature">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={data.temperature ?? 0.7}
-                  onChange={(e) => updateData({ temperature: parseFloat(e.target.value) })}
-                  style={{ flex: 1, accentColor: accent, height: 3 }}
-                />
-                <span style={{ fontSize: 11, color: 'var(--text-primary)', fontWeight: 600, minWidth: 28, textAlign: 'right' }}>
-                  {(data.temperature ?? 0.7).toFixed(2)}
+          </div>
+        ) : (
+          /* Node Selected Inspector */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Header / Identity */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #1E2A36', paddingBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {selectedNode.data.nodeType === 'llm_agent' ? (
+                  <Brain size={14} style={{ color: '#8FA8BB' }} />
+                ) : selectedNode.data.nodeType === 'tool' ? (
+                  <Wrench size={14} style={{ color: '#7FAF9A' }} />
+                ) : (
+                  <GitBranch size={14} style={{ color: '#D4A373' }} />
+                )}
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#B8B1A6', textTransform: 'uppercase', fontFamily: 'var(--font-mono), monospace' }}>
+                  {selectedNode.data.nodeType === 'llm_agent' ? 'LLM Agent' : selectedNode.data.nodeType === 'tool' ? 'Tool Node' : 'Router'}
                 </span>
               </div>
-            </Field>
-          </>
-        )}
 
-        {/* ── Tool fields ──────────────────────────────────────────────── */}
-        {data.nodeType === 'tool' && (
-          <>
-            <PanelDivider label="Tool" />
-
-            <Field label="Tool">
-              <select
-                value={data.toolName ?? ''}
-                onChange={(e) => updateData({ toolName: e.target.value as ToolName })}
-                className="sf-input"
+              <button
+                onClick={() => deleteNode(selectedNode.id)}
+                title="Delete node"
+                style={{
+                  background: 'transparent',
+                  border: '1px solid #2A3947',
+                  borderRadius: 4,
+                  color: '#C97878',
+                  cursor: 'pointer',
+                  padding: '3px 6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 10.5,
+                }}
               >
-                <option value="" disabled>Select a tool</option>
-                <option value="tavily_search">Tavily Search</option>
-                <option value="wikipedia">Wikipedia</option>
-                <option value="calculator">Calculator</option>
-                <option value="python_repl">Python REPL</option>
-              </select>
+                <Trash2 size={11} />
+                <span>Delete</span>
+              </button>
+            </div>
+
+            {/* Diagnostics if node has error */}
+            {nodeErrors.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {nodeErrors.map((err, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      padding: '6px 8px',
+                      background: '#1F1A1E',
+                      border: '1px solid #C97878',
+                      borderRadius: 4,
+                      fontSize: 10.5,
+                      color: '#E7A1A1',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <AlertCircle size={12} style={{ color: '#C97878', flexShrink: 0 }} />
+                    <span>{err.message}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Label */}
+            <Field label="Node Label">
+              <input
+                type="text"
+                value={selectedNode.data.label || ''}
+                onChange={(e) => handleUpdate({ label: e.target.value })}
+                className="sf-input"
+              />
             </Field>
 
-            {data.toolName === 'tavily_search' && (
-              <Field label="Tavily API Key">
-                <SecretInput
-                  value={data.toolApiKey ?? ''}
-                  onChange={(v) => updateData({ toolApiKey: v })}
-                  placeholder="tvly-..."
-                />
-              </Field>
-            )}
-          </>
-        )}
-
-        {/* ── Router fields ────────────────────────────────────────────── */}
-        {data.nodeType === 'router' && (
-          <>
-            <PanelDivider label="Conditions" />
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {(data.conditions ?? []).map((cond: RouterCondition, idx: number) => (
-                <div
-                  key={idx}
-                  style={{
-                    background: 'var(--panel-bg-alt)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    padding: '8px 10px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 6,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Rule {idx + 1}
-                    </span>
-                    <button
-                      onClick={() => {
-                        const next = [...(data.conditions ?? [])];
-                        next.splice(idx, 1);
-                        updateData({ conditions: next });
-                      }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: 2, display: 'flex' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-faint)')}
-                    >
-                      <Trash2 size={11} />
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={cond.keyword}
-                    onChange={(e) => {
-                      const next = [...(data.conditions ?? [])];
-                      next[idx] = { ...next[idx], keyword: e.target.value };
-                      updateData({ conditions: next });
-                    }}
-                    placeholder="if message contains…"
-                    className="sf-input"
-                    spellCheck={false}
-                  />
+            {/* ── LLM Agent Fields ───────────────────────────────────────────── */}
+            {selectedNode.data.nodeType === 'llm_agent' && (
+              <>
+                <Field label="Model Provider">
                   <select
-                    value={cond.targetNodeId}
+                    value={selectedNode.data.provider || 'openai'}
                     onChange={(e) => {
-                      const next = [...(data.conditions ?? [])];
-                      next[idx] = { ...next[idx], targetNodeId: e.target.value };
-                      updateData({ conditions: next });
+                      const prov = e.target.value as LLMProvider;
+                      handleUpdate({
+                        provider: prov,
+                        model: PROVIDER_MODELS[prov][0],
+                      });
                     }}
                     className="sf-input"
                   >
-                    <option value="" disabled>Route to…</option>
-                    <option value="END">END</option>
-                    {nodes
-                      .filter((n) => n.id !== selectedNode.id)
-                      .map((n) => (
-                        <option key={n.id} value={n.id}>{n.data.label}</option>
-                      ))}
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="google">Google Gemini</option>
+                    <option value="ollama">Ollama (Local)</option>
                   </select>
-                </div>
-              ))}
+                </Field>
 
-              <button
-                onClick={() => {
-                  const next = [...(data.conditions ?? []), { keyword: '', targetNodeId: '' }];
-                  updateData({ conditions: next });
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 5,
-                  padding: '6px',
-                  background: 'transparent',
-                  border: '1px dashed var(--border)',
-                  borderRadius: 7,
-                  color: 'var(--text-muted)',
-                  fontSize: 11,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  transition: 'border-color 0.12s, color 0.12s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--router-color, #f59e0b)';
-                  e.currentTarget.style.color = 'var(--text-primary)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border)';
-                  e.currentTarget.style.color = 'var(--text-muted)';
-                }}
-              >
-                <Plus size={12} />
-                Add condition
-              </button>
-            </div>
-          </>
+                <Field label="Model Selection">
+                  <select
+                    value={selectedNode.data.model || 'gpt-4o'}
+                    onChange={(e) => handleUpdate({ model: e.target.value })}
+                    className="sf-input"
+                  >
+                    {(PROVIDER_MODELS[selectedNode.data.provider || 'openai'] || []).map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label={`Temperature: ${selectedNode.data.temperature ?? 0.7}`}>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={selectedNode.data.temperature ?? 0.7}
+                    onChange={(e) => handleUpdate({ temperature: parseFloat(e.target.value) })}
+                    style={{ accentColor: '#8FA8BB', width: '100%', cursor: 'pointer' }}
+                  />
+                </Field>
+
+                <Field label="System Prompt">
+                  <textarea
+                    rows={4}
+                    value={selectedNode.data.systemPrompt || ''}
+                    onChange={(e) => handleUpdate({ systemPrompt: e.target.value })}
+                    placeholder="Define agent personality, task boundaries, and execution rules…"
+                    className="sf-input"
+                    style={{ resize: 'vertical', minHeight: 70 }}
+                  />
+                </Field>
+
+                <div style={{ borderTop: '1px solid #1E2A36', paddingTop: 12 }}>
+                  <label className="sf-label">Attached Tools</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                    {[
+                      { id: 'tavily_search', label: 'Tavily Web Search' },
+                      { id: 'wikipedia', label: 'Wikipedia' },
+                    ].map((tool) => {
+                      const currentTools: ToolName[] = Array.isArray(selectedNode.data.tools)
+                        ? (selectedNode.data.tools as ToolName[])
+                        : [];
+                      const isChecked = currentTools.includes(tool.id as ToolName);
+                      return (
+                        <label
+                          key={tool.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '6px 8px',
+                            background: '#182330',
+                            border: `1px solid ${isChecked ? '#344555' : '#1E2A36'}`,
+                            borderRadius: 4,
+                            cursor: 'pointer',
+                            fontSize: 11.5,
+                            color: isChecked ? '#E7EBEF' : '#8B98A5',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...currentTools, tool.id as ToolName]
+                                : currentTools.filter((t: ToolName) => t !== tool.id);
+                              handleUpdate({ tools: next });
+                            }}
+                            style={{ accentColor: '#8FA8BB' }}
+                          />
+                          <span>{tool.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Tool Fields ────────────────────────────────────────────────── */}
+            {selectedNode.data.nodeType === 'tool' && (
+              <>
+                <Field label="Tool Implementation">
+                  <select
+                    value={selectedNode.data.toolName || 'tavily_search'}
+                    onChange={(e) => handleUpdate({ toolName: e.target.value as ToolName })}
+                    className="sf-input"
+                  >
+                    <option value="tavily_search">Tavily Web Search</option>
+                    <option value="wikipedia">Wikipedia</option>
+                  </select>
+                </Field>
+
+                <div style={{ padding: '8px 10px', background: '#182330', borderRadius: 4, fontSize: 11, color: '#8B98A5', lineHeight: 1.4 }}>
+                  In LangGraph Python, this tool will execute standard ToolNode integration bound to upstream agent loops.
+                </div>
+              </>
+            )}
+
+            {/* ── Router Fields ──────────────────────────────────────────────── */}
+            {selectedNode.data.nodeType === 'router' && (
+              <>
+                <div style={{ borderTop: '1px solid #1E2A36', paddingTop: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <label className="sf-label" style={{ margin: 0 }}>Branch Conditions</label>
+                    <button
+                      onClick={() => {
+                        const conds = selectedNode.data.conditions || [];
+                        const otherNodes = nodes.filter((n) => n.id !== selectedNode.id && n.data.nodeType !== 'tool');
+                        const defaultTarget = otherNodes[0]?.id || '';
+                        handleUpdate({
+                          conditions: [...conds, { keyword: `route_${conds.length + 1}`, targetNodeId: defaultTarget }],
+                        });
+                      }}
+                      style={{
+                        background: '#182330',
+                        border: '1px solid #2A3947',
+                        borderRadius: 3,
+                        color: '#DDD7CC',
+                        fontSize: 10.5,
+                        cursor: 'pointer',
+                        padding: '2px 6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 3,
+                      }}
+                    >
+                      <Plus size={11} />
+                      <span>Add Branch</span>
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {(selectedNode.data.conditions || []).map((cond: RouterCondition, idx: number) => {
+                      const otherNodes = nodes.filter((n) => n.id !== selectedNode.id && n.data.nodeType !== 'tool');
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            padding: '8px 10px',
+                            background: '#182330',
+                            border: '1px solid #2A3947',
+                            borderRadius: 4,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 6,
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 10, color: '#5B6A78', textTransform: 'uppercase' }}>Branch {idx + 1}</span>
+                            <button
+                              onClick={() => {
+                                const next = (selectedNode.data.conditions || []).filter((_, i) => i !== idx);
+                                handleUpdate({ conditions: next });
+                              }}
+                              style={{ background: 'none', border: 'none', color: '#C97878', cursor: 'pointer', padding: 1 }}
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
+
+                          <div>
+                            <input
+                              type="text"
+                              value={cond.keyword}
+                              onChange={(e) => {
+                                const next = [...(selectedNode.data.conditions || [])];
+                                next[idx] = { ...next[idx], keyword: e.target.value };
+                                handleUpdate({ conditions: next });
+                              }}
+                              placeholder="keyword (e.g. code)"
+                              className="sf-input"
+                              style={{ fontSize: 11 }}
+                            />
+                          </div>
+
+                          <div>
+                            <select
+                              value={cond.targetNodeId}
+                              onChange={(e) => {
+                                const next = [...(selectedNode.data.conditions || [])];
+                                next[idx] = { ...next[idx], targetNodeId: e.target.value };
+                                handleUpdate({ conditions: next });
+                              }}
+                              className="sf-input"
+                              style={{ fontSize: 11 }}
+                            >
+                              <option value="">Select target node…</option>
+                              {otherNodes.map((n) => (
+                                <option key={n.id} value={n.id}>
+                                  {n.data.label || n.id} ({n.data.nodeType})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {(!selectedNode.data.conditions || selectedNode.data.conditions.length === 0) && (
+                      <div style={{ fontSize: 11, color: '#5B6A78', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>
+                        No branching conditions defined.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         )}
       </div>
-    </div>
+    </aside>
   );
 }

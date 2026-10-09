@@ -2,16 +2,10 @@
 /**
  * @file CodeModal.tsx
  * @description Modal displaying the generated LangGraph Python code.
- *
- * Design decisions:
- * - Backdrop is a very subtle dark overlay (not pitch black) so the canvas peeks through.
- * - The modal itself is wide and tall but not full-screen — intentional, so it feels like a sheet.
- * - Header shows a macOS-style traffic-light dot pattern for visual polish.
- * - Footer has Copy and Close buttons, with a checkmark flash on copy.
- * - SyntaxHighlighter uses 'vscDarkPlus' theme — closer to a real IDE than atomDark.
+ * Redesigned in the Dark Navy / Slate / Warm Stone developer IDE aesthetic.
  */
 import React, { useState } from 'react';
-import { X, Copy, Check, Download } from 'lucide-react';
+import { X, Copy, Check, Download, FileCode } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useGraphStore } from '@/store/graphStore';
@@ -51,8 +45,8 @@ export function CodeModal() {
         position: 'fixed',
         inset: 0,
         zIndex: 200,
-        background: 'rgba(0,0,0,0.72)',
-        backdropFilter: 'blur(4px)',
+        background: 'rgba(5, 9, 14, 0.75)',
+        backdropFilter: 'blur(3px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -66,15 +60,15 @@ export function CodeModal() {
       <div
         style={{
           width: '100%',
-          maxWidth: 860,
+          maxWidth: 900,
           maxHeight: '85vh',
           display: 'flex',
           flexDirection: 'column',
-          background: '#17171c',
-          border: '1px solid #2e2e38',
-          borderRadius: 14,
+          background: '#111A24',
+          border: '1px solid #2A3947',
+          borderRadius: 6,
           overflow: 'hidden',
-          boxShadow: '0 24px 80px rgba(0,0,0,0.8), 0 4px 16px rgba(0,0,0,0.6)',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.8)',
         }}
       >
         {/* ── Header ───────────────────────────────────────────────────── */}
@@ -83,31 +77,33 @@ export function CodeModal() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '12px 16px',
-            borderBottom: '1px solid #2e2e38',
-            background: '#1c1c22',
+            padding: '10px 16px',
+            borderBottom: '1px solid #2A3947',
+            background: '#182330',
             flexShrink: 0,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* macOS traffic lights (decorative) */}
-            <div style={{ display: 'flex', gap: 5 }}>
-              {['#ff5f57', '#febc2e', '#28c840'].map((c, i) => (
-                <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />
-              ))}
-            </div>
-            <div style={{ width: 1, height: 14, background: '#2e2e38' }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#e4e4e7', letterSpacing: '-0.2px' }}>
-              {agentName || 'agent'}.py
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FileCode size={14} className="text-[#8FA8BB]" />
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#DDD7CC',
+                fontFamily: 'var(--font-mono), monospace',
+              }}
+            >
+              {(agentName || 'agent').replace(/\s+/g, '_').toLowerCase()}.py
             </span>
             <span
               style={{
                 fontSize: 10,
-                color: '#52525b',
-                background: '#232329',
-                border: '1px solid #2e2e38',
+                color: '#8B98A5',
+                background: '#111A24',
+                border: '1px solid #2A3947',
                 borderRadius: 4,
                 padding: '1px 6px',
+                fontFamily: 'var(--font-mono), monospace',
               }}
             >
               {lineCount} lines
@@ -117,22 +113,21 @@ export function CodeModal() {
           <button
             onClick={() => setIsCodeModalOpen(false)}
             style={{
-              background: 'none',
+              background: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              color: '#71717a',
+              color: '#8B98A5',
               padding: 4,
-              borderRadius: 6,
+              borderRadius: 4,
               display: 'flex',
               alignItems: 'center',
-              transition: 'color 0.1s, background 0.1s',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#e4e4e7';
-              e.currentTarget.style.background = '#2e2e38';
+              e.currentTarget.style.color = '#E7EBEF';
+              e.currentTarget.style.background = '#263746';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#71717a';
+              e.currentTarget.style.color = '#8B98A5';
               e.currentTarget.style.background = 'transparent';
             }}
           >
@@ -141,19 +136,26 @@ export function CodeModal() {
         </div>
 
         {/* ── Code body ────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', background: '#0B1117' }}>
           <SyntaxHighlighter
             language="python"
             style={vscDarkPlus}
             showLineNumbers
-            lineNumberStyle={{ color: '#3f3f4a', fontSize: 11, minWidth: 36, paddingRight: 16, userSelect: 'none' }}
+            lineNumberStyle={{
+              color: '#344555',
+              fontSize: 11,
+              minWidth: 36,
+              paddingRight: 16,
+              userSelect: 'none',
+              fontFamily: 'var(--font-mono), monospace',
+            }}
             customStyle={{
               margin: 0,
               padding: '16px 20px',
-              background: '#17171c',
-              fontSize: 12.5,
-              lineHeight: 1.65,
-              fontFamily: "'Geist Mono', 'SF Mono', 'Fira Code', monospace",
+              background: '#0B1117',
+              fontSize: 12,
+              lineHeight: 1.6,
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
             }}
           >
             {generatedCode}
@@ -167,55 +169,79 @@ export function CodeModal() {
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '10px 16px',
-            borderTop: '1px solid #2e2e38',
-            background: '#1c1c22',
+            borderTop: '1px solid #2A3947',
+            background: '#182330',
             flexShrink: 0,
             gap: 8,
           }}
         >
-          <span style={{ fontSize: 11, color: '#52525b' }}>
-            Generated by Swarmly · LangGraph Python
+          <span
+            style={{
+              fontSize: 11,
+              color: '#8B98A5',
+              fontFamily: 'var(--font-mono), monospace',
+            }}
+          >
+            LangGraph Python · StateGraph Architecture
           </span>
 
           <div style={{ display: 'flex', gap: 6 }}>
             <button
               onClick={handleDownload}
               style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '5px 12px',
-                background: 'transparent',
-                border: '1px solid #363636',
-                borderRadius: 7,
-                color: '#71717a',
-                fontSize: 12, fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 12px',
+                background: '#111A24',
+                border: '1px solid #2A3947',
+                borderRadius: 5,
+                color: '#DDD7CC',
+                fontSize: 11.5,
+                fontWeight: 500,
                 cursor: 'pointer',
                 fontFamily: 'inherit',
                 transition: 'border-color 0.12s, color 0.12s',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#e4e4e7'; e.currentTarget.style.borderColor = '#52525b'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = '#71717a'; e.currentTarget.style.borderColor = '#363636'; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#344555';
+                e.currentTarget.style.color = '#E7EBEF';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = '#2A3947';
+                e.currentTarget.style.color = '#DDD7CC';
+              }}
             >
-              <Download size={12} /> Download
+              <Download size={12} />
+              <span>Download</span>
             </button>
 
             <button
               onClick={handleCopy}
               style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '5px 14px',
-                background: copied ? '#1a3a27' : '#6965db',
-                border: `1px solid ${copied ? '#3ecf8e' : 'transparent'}`,
-                borderRadius: 7,
-                color: copied ? '#3ecf8e' : '#fff',
-                fontSize: 12, fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 14px',
+                background: copied ? '#1e332a' : '#263746',
+                border: `1px solid ${copied ? '#7FAF9A' : '#344555'}`,
+                borderRadius: 5,
+                color: copied ? '#7FAF9A' : '#DDD7CC',
+                fontSize: 11.5,
+                fontWeight: 600,
                 cursor: 'pointer',
                 fontFamily: 'inherit',
-                transition: 'background 0.2s, color 0.2s, border-color 0.2s',
-                boxShadow: copied ? 'none' : '0 2px 8px rgba(105,101,219,0.3)',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                if (!copied) e.currentTarget.style.background = '#344555';
+              }}
+              onMouseLeave={(e) => {
+                if (!copied) e.currentTarget.style.background = '#263746';
               }}
             >
               {copied ? <Check size={12} /> : <Copy size={12} />}
-              {copied ? 'Copied!' : 'Copy'}
+              <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
         </div>

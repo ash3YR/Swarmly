@@ -71,9 +71,25 @@ class GraphRequest(BaseModel):
     edges: list[EdgeConfig] = []
 
 
+class ValidationErrorItem(BaseModel):
+    """A single validation error or warning."""
+    severity: str  # "error" or "warning"
+    message: str
+    node_id: Optional[str] = None
+    edge_source: Optional[str] = None
+    edge_target: Optional[str] = None
+
+
 class GenerateResponse(BaseModel):
     """Response payload for graph generation."""
     code: str
     agent_name: str
     node_count: int
     edge_count: int
+    validation_warnings: list[ValidationErrorItem] = []
+
+
+class ValidationResponse(BaseModel):
+    """Response when validation fails."""
+    valid: bool = False
+    errors: list[ValidationErrorItem] = []

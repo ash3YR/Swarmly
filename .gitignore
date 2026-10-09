@@ -1,0 +1,126 @@
+# ==============================================================================
+# Swarmly — Root .gitignore
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Python Artifacts & Caches
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Testing & Linting Caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Packaging & Builds
+dist/
+build/
+*.egg-info/
+*.egg
+eggs/
+.eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+downloads/
+
+# ------------------------------------------------------------------------------
+# 2. Next.js / Node.js Artifacts & Dependencies
+# ------------------------------------------------------------------------------
+node_modules/
+.next/
+out/
+coverage/
+
+# TypeScript & Framework Build Metadata
+*.tsbuildinfo
+next-env.d.ts
+
+# Package Manager Caches & Package Bundlers
+.pnp/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.turbo/
+.vercel/
+
+# ------------------------------------------------------------------------------
+# 3. Environment Variables & Secrets (CRITICAL)
+# ------------------------------------------------------------------------------
+# Ignore all actual environment and local config files
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Explicitly permit tracking of safe template / example files
+!.env.example
+!.env.template
+!*.env.example
+
+# Credentials & Certificate Files
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+
+# ------------------------------------------------------------------------------
+# 4. OS & Editor Artifacts
+# ------------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# IDE & Editor Directories
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.bak
+
+# General Logs
+*.log
+
+# ------------------------------------------------------------------------------
+# 5. Test, Subagent & Browser Automation Artifacts
+# ------------------------------------------------------------------------------
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
