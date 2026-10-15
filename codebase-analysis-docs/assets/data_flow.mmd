@@ -1,0 +1,32 @@
+sequenceDiagram
+    autonumber
+    actor User as Developer / User
+    participant Toolbar as Toolbar Component
+    participant Canvas as Canvas (ReactFlow)
+    participant Store as Zustand (useGraphStore)
+    participant API as Frontend API (src/lib/api.ts)
+    participant Backend as FastAPI (/api/generate)
+    participant Generator as Code Generator Engine
+    participant Modal as CodeModal Component
+
+    User->>Toolbar: Drag Node Icon (e.g. LLM Agent)
+    Toolbar->>Canvas: DragEvent (application/reactflow-type)
+    Canvas->>Store: addNode({ id, type, position, data })
+    User->>Canvas: Connect Node Handles (Edge Created)
+    Canvas->>Store: onConnect(connection) -> addEdge()
+    User->>Canvas: Click Node
+    Canvas->>Store: selectNode(nodeId)
+    Store-->>User: PropertiesPanel opens for configuration
+    User->>Store: updateNodeData(nodeId, updates)
+    User->>Toolbar: Click "Generate" Button
+    Toolbar->>Store: setIsGenerating(true)
+    Toolbar->>API: generateCode(GraphRequest)
+    API->>Backend: POST /api/generate
+    Backend->>Generator: generate_langgraph_code(request)
+    Generator-->>Backend: Python code string
+    Backend-->>API: GenerateResponse JSON
+    API-->>Toolbar: response
+    Toolbar->>Store: setGeneratedCode(res.code) & setIsCodeModalOpen(true)
+    Toolbar->>Store: setIsGenerating(false)
+    Store-->>Modal: Open Modal with Syntax Highlighting
+    User->>Modal: Copy Code or Download .py file

@@ -1,0 +1,27 @@
+graph TD
+    Start([GraphRequest Input]) --> Pass0[Pass 0: Topology & Dependency Analysis]
+    
+    subgraph Pass0_Details [Analysis Phase]
+        Pass0 --> CollectProviders[Extract Unique Providers]
+        Pass0 --> CollectTools[Extract Unique Tools]
+        Pass0 --> MapInEdges[Compute In-Degree & Incoming Edges]
+        Pass0 --> MapOutEdges[Compute Out-Degree & Outgoing Edges]
+        Pass0 --> MapLLMTools[Identify Tool Nodes Linked from LLM Nodes]
+    end
+
+    Pass0_Details --> Pass1[Pass 1: Import Collection _generate_imports]
+    Pass1 --> Pass2[Pass 2: AgentState Schema _generate_state_schema]
+    Pass2 --> Pass3[Pass 3: Tool Instantiation _generate_tools]
+    Pass3 --> Pass4[Pass 4: Node Functions Synthesis _generate_nodes]
+    Pass4 --> Pass5[Pass 5: StateGraph Assembly _generate_graph_construction]
+    Pass5 --> Pass6[Pass 6: Entrypoint & Main Block _generate_main_block]
+    
+    subgraph Pass5_Details [StateGraph Assembly Logic]
+        Pass5 --> AddNodes[Add LLM Nodes & ToolNodes to Graph]
+        Pass5 --> EntryPoint[Determine Entry Point: START edge -> In-degree 0 -> First Node]
+        Pass5 --> StandardEdges[Add Regular Static Edges - Exclude Routers & START]
+        Pass5 --> ConditionalEdges[Attach Conditional Edges to Nodes Feeding Routers]
+        Pass5 --> CompileGraph[graph.compile]
+    end
+
+    Pass6 --> Output([Complete Runnable Python LangGraph Script])

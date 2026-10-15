@@ -10,3 +10,7 @@ langchain-google-genai
 langchain-community
 langchain-ollama
 tavily-python
+PyJWT
+cryptography
+httpx
+pytest

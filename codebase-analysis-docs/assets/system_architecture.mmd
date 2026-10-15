@@ -1,0 +1,36 @@
+graph TD
+    subgraph Client ["Client Browser (Next.js 16 + React 19)"]
+        UI["Floating UI Layer<br/>(Toolbar, PropertiesPanel, CodeModal)"]
+        Canvas["ReactFlow Canvas v12<br/>(AgentNode, ToolNode, RouterNode)"]
+        Store["Zustand Store<br/>(useGraphStore)"]
+        
+        UI -->|User Interactions| Store
+        Canvas -->|Node/Edge Changes| Store
+        Store -->|State Subscriptions| UI
+        Store -->|Graph Topology| Canvas
+    end
+
+    subgraph API ["Network Transport"]
+        Fetch["REST API Client (fetch)<br/>POST /api/generate"]
+        Payload["GraphRequest Payload<br/>(nodes, edges, agent_name)"]
+    end
+
+    subgraph Backend ["FastAPI Backend (Python 3.13)"]
+        Router["FastAPI Router<br/>src/api/generate.py"]
+        Validator["Pydantic Models<br/>src/models/graph.py"]
+        Compiler["Code Generator Engine<br/>src/services/code_generator.py"]
+        
+        Router --> Validator
+        Validator --> Compiler
+    end
+
+    subgraph Output ["Generated Artifact"]
+        PythonCode["Executable LangGraph Python Script<br/>(StateGraph, ToolNode, TypedDict State)"]
+    end
+
+    Store -->|Trigger Generate| Fetch
+    Fetch --> Payload
+    Payload --> Router
+    Compiler --> PythonCode
+    PythonCode -->|GenerateResponse JSON| Fetch
+    Fetch -->|Display & Download| UI
